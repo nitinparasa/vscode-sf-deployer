@@ -2,6 +2,20 @@
 
 All notable changes to the "salesforce-metadata-deployer" extension will be documented in this file.
 
+## [1.1.3] - 2025-09-10
+
+### Added
+- **Sub-component Grouping**: Custom object components (fields, validation rules, list views, etc.) are now grouped under their respective categories within each custom object
+- **Improved Tree Organization**: Enhanced hierarchical structure with intermediate group nodes for better visual organization
+
+### Enhanced
+- **Package.xml Generation**: Custom object sub-components now correctly include parent object names (e.g., `Trade_Deal__c.ActualRevenueCurrentFY__c`)
+- **Tree View Structure**: Better organization with expandable groups for CustomField, ValidationRule, ListView, WebLink, RecordType, CompactLayout, and BusinessProcess
+
+### Fixed
+- **TypeScript Warnings**: Resolved unused variable warnings in metadata utilities
+- **Bundle Component Processing**: Fixed processing of Aura and Lightning Web Component bundles
+
 ## [1.1.2] - 2025-09-10
 
 ### Fixed

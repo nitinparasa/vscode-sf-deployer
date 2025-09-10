@@ -48,46 +48,50 @@ function parseMetadataFromPath(filePath: string, baseFolderType: string): { type
     
     // Handle custom object sub-components
     if (baseFolderType === 'CustomObject') {
+        // Extract parent object name from the path
+        const objectMatch = relativePath.match(/^([^\/]+)\//);
+        const parentObjectName = objectMatch ? objectMatch[1] : '';
+        
         // Check if this is a custom field
         if (relativePath.includes('/fields/') && fileName.endsWith('.field-meta.xml')) {
             const fieldName = fileName.replace('.field-meta.xml', '');
-            return { type: 'CustomField', name: fieldName };
+            return { type: 'CustomField', name: `${parentObjectName}.${fieldName}` };
         }
         
         // Check if this is a validation rule
         if (relativePath.includes('/validationRules/') && fileName.endsWith('.validationRule-meta.xml')) {
             const ruleName = fileName.replace('.validationRule-meta.xml', '');
-            return { type: 'ValidationRule', name: ruleName };
+            return { type: 'ValidationRule', name: `${parentObjectName}.${ruleName}` };
         }
         
         // Check if this is a list view
         if (relativePath.includes('/listViews/') && fileName.endsWith('.listView-meta.xml')) {
             const listViewName = fileName.replace('.listView-meta.xml', '');
-            return { type: 'ListView', name: listViewName };
+            return { type: 'ListView', name: `${parentObjectName}.${listViewName}` };
         }
         
         // Check if this is a web link
         if (relativePath.includes('/webLinks/') && fileName.endsWith('.webLink-meta.xml')) {
             const webLinkName = fileName.replace('.webLink-meta.xml', '');
-            return { type: 'WebLink', name: webLinkName };
+            return { type: 'WebLink', name: `${parentObjectName}.${webLinkName}` };
         }
         
         // Check if this is a record type
         if (relativePath.includes('/recordTypes/') && fileName.endsWith('.recordType-meta.xml')) {
             const recordTypeName = fileName.replace('.recordType-meta.xml', '');
-            return { type: 'RecordType', name: recordTypeName };
+            return { type: 'RecordType', name: `${parentObjectName}.${recordTypeName}` };
         }
         
         // Check if this is a compact layout
         if (relativePath.includes('/compactLayouts/') && fileName.endsWith('.compactLayout-meta.xml')) {
             const layoutName = fileName.replace('.compactLayout-meta.xml', '');
-            return { type: 'CompactLayout', name: layoutName };
+            return { type: 'CompactLayout', name: `${parentObjectName}.${layoutName}` };
         }
         
         // Check if this is a business process
         if (relativePath.includes('/businessProcesses/') && fileName.endsWith('.businessProcess-meta.xml')) {
             const processName = fileName.replace('.businessProcess-meta.xml', '');
-            return { type: 'BusinessProcess', name: processName };
+            return { type: 'BusinessProcess', name: `${parentObjectName}.${processName}` };
         }
         
         // Check if this is the custom object itself
@@ -184,12 +188,17 @@ export async function getWorkspaceMetadata(): Promise<{ metadata: { [type: strin
                 const apiName = METADATA_TYPE_MAP[folder];
                 if (!apiName) { continue; }
 
-                let items: string[] = [];
-                
                 if (['AuraDefinitionBundle', 'LightningComponentBundle'].includes(apiName)) {
-                    items = fs.readdirSync(typePath, { withFileTypes: true })
+                    const items = fs.readdirSync(typePath, { withFileTypes: true })
                         .filter(dirent => dirent.isDirectory() && !dirent.name.startsWith('.'))
                         .map(dirent => dirent.name);
+                    
+                    // Add bundle components to metadata
+                    if (items.length > 0) {
+                        const existingItems = metadata[apiName] || [];
+                        const combinedItems = [...new Set([...existingItems, ...items])];
+                        metadata[apiName] = combinedItems.sort();
+                    }
                 } 
                 // Handle all other file-based components recursively using the proper parser
                 else {
@@ -229,7 +238,33 @@ export async function getWorkspaceMetadata(): Promise<{ metadata: { [type: strin
 export function organizeMetadataForTreeView(metadata: { [type: string]: any[] }): any {
     const tree: { [key: string]: any } = {};
 
-    for (const [type, items] of Object.entries(metadata)) {
+    // First, organize custom object sub-components under their parent objects
+    const customObjectComponents: { [objectName: string]: { [componentType: string]: string[] } } = {};
+    const nonCustomObjectMetadata: { [type: string]: any[] } = {};
+
+    for (const [type, itemList] of Object.entries(metadata)) {
+        if (['CustomField', 'ValidationRule', 'ListView', 'WebLink', 'RecordType', 'CompactLayout', 'BusinessProcess'].includes(type)) {
+            // These are custom object sub-components
+            for (const item of itemList) {
+                const parts = item.split('.');
+                if (parts.length === 2) {
+                    const [objectName, componentName] = parts;
+                    if (!customObjectComponents[objectName]) {
+                        customObjectComponents[objectName] = {};
+                    }
+                    if (!customObjectComponents[objectName][type]) {
+                        customObjectComponents[objectName][type] = [];
+                    }
+                    customObjectComponents[objectName][type].push(componentName);
+                }
+            }
+        } else {
+            nonCustomObjectMetadata[type] = itemList;
+        }
+    }
+
+    // Process regular metadata types (including CustomObject)
+    for (const [type, itemList] of Object.entries(nonCustomObjectMetadata)) {
         const typeNode = {
             name: type,
             type: type,
@@ -239,9 +274,54 @@ export function organizeMetadataForTreeView(metadata: { [type: string]: any[] })
 
         const isHierarchical = type === 'CustomObject' || type === 'ApexClass' || type === 'ApexTrigger';
 
-        if (isHierarchical) {
+        if (type === 'CustomObject') {
+            // Special handling for CustomObject - include sub-components
             const childMap: { [key: string]: any } = {};
-            for (const item of items) {
+            
+            for (const objectName of itemList) {
+                childMap[objectName] = {
+                    name: objectName,
+                    displayName: objectName,
+                    type: type,
+                    selectable: true,
+                    children: {}
+                };
+
+                // Add sub-components if they exist
+                const subComponents = customObjectComponents[objectName];
+                if (subComponents) {
+                    for (const [componentType, componentNames] of Object.entries(subComponents)) {
+                        childMap[objectName].children[componentType] = {
+                            name: `${objectName}_${componentType}`,
+                            displayName: componentType,
+                            type: componentType,
+                            selectable: false,
+                            children: componentNames.map(name => ({
+                                name: `${objectName}.${name}`,
+                                displayName: name,
+                                type: componentType,
+                                selectable: true,
+                                children: []
+                            }))
+                        };
+                    }
+                }
+            }
+
+            const convertMapToArray = (map: any): any[] => {
+                return Object.values(map).map((node: any) => {
+                    if (node.children && !Array.isArray(node.children)) {
+                        node.children = convertMapToArray(node.children);
+                    }
+                    return node;
+                });
+            };
+            typeNode.children = convertMapToArray(childMap);
+
+        } else if (isHierarchical) {
+            // Handle other hierarchical types (ApexClass, ApexTrigger)
+            const childMap: { [key: string]: any } = {};
+            for (const item of itemList) {
                 const parts = item.split('/');
                 let currentLevel = childMap;
                 let currentPath = '';
@@ -272,7 +352,8 @@ export function organizeMetadataForTreeView(metadata: { [type: string]: any[] })
             typeNode.children = convertMapToArray(childMap);
 
         } else {
-            typeNode.children = items.map(item => ({
+            // Handle flat metadata types
+            typeNode.children = itemList.map(item => ({
                 name: item,
                 displayName: item,
                 type: type,
