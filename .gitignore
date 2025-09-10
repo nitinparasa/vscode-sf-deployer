@@ -1,0 +1,8 @@
+node_modules/
+releases/
+dist/
+out/
+
+# Cache
+.vscode/
+.claude/

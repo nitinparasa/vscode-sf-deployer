@@ -1,0 +1,92 @@
+{
+  "publisher": "Nitin Parasa",
+  "name": "salesforce-metadata-deployer",
+  "displayName": "Salesforce Metadata Deployer",
+  "description": "VS Code extension with tree view interface to select, validate, and deploy Salesforce metadata using SFDX CLI.",
+  "version": "1.1.0",
+  "engines": {
+    "vscode": "^1.103.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "workspaceContains:force-app/main/default"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "salesforce-metadata-deployer.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "salesforce-metadata-deployer.deploySelected",
+        "title": "Deploy Selected Metadata"
+      },
+      {
+        "command": "salesforce-metadata-deployer.toggleSelect",
+        "title": "Select/Deselect Metadata Item"
+      },
+      {
+        "command": "salesforce-metadata-deployer.openWebview",
+        "title": "Open Metadata Deployment UI"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "salesforceMetadata",
+          "title": "Salesforce Metadata",
+          "icon": "symbol-structure"
+        }
+      ]
+    },
+    "views": {
+      "salesforceMetadata": [
+        {
+          "id": "salesforceMetadataExplorer",
+          "name": "Metadata Explorer"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "salesforce-metadata-deployer.toggleSelect",
+          "when": "view == salesforceMetadataExplorer && viewItem == salesforceMetadataExplorer && viewItem.contextValue != undefined",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/vscode": "^1.103.0",
+    "@typescript-eslint/eslint-plugin": "^8.42.0",
+    "@typescript-eslint/parser": "^8.42.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.34.0",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.2",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "xml2js": "^0.6.2"
+  }
+}
