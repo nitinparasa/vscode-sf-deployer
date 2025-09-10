@@ -3,7 +3,7 @@
   "name": "salesforce-metadata-deployer",
   "displayName": "Salesforce Metadata Deployer",
   "description": "VS Code extension with tree view interface to select, validate, and deploy Salesforce metadata using SFDX CLI.",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "engines": {
     "vscode": "^1.103.0"
   },

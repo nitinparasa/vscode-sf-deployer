@@ -20,6 +20,119 @@ export const METADATA_TYPE_MAP: { [key: string]: string } = {
     'labels': 'CustomLabels'
 };
 
+/**
+ * Metadata types that preserve folder structure in their component names.
+ * For these types, subfolders are part of the component identity.
+ */
+const FOLDER_AWARE_METADATA_TYPES = new Set([
+    'Report',
+    'Dashboard', 
+    'EmailTemplate',
+    'Document',
+    'Flow',
+    'Workflow'
+]);
+
+/**
+ * Determines the correct metadata type and component name for a file path.
+ * Handles special cases like custom object sub-components (fields, validation rules, etc.)
+ */
+function parseMetadataFromPath(filePath: string, baseFolderType: string): { type: string; name: string } | null {
+    const fileName = path.basename(filePath);
+    const relativePath = filePath;
+    
+    // Skip hidden files
+    if (fileName.startsWith('.')) {
+        return null;
+    }
+    
+    // Handle custom object sub-components
+    if (baseFolderType === 'CustomObject') {
+        // Check if this is a custom field
+        if (relativePath.includes('/fields/') && fileName.endsWith('.field-meta.xml')) {
+            const fieldName = fileName.replace('.field-meta.xml', '');
+            return { type: 'CustomField', name: fieldName };
+        }
+        
+        // Check if this is a validation rule
+        if (relativePath.includes('/validationRules/') && fileName.endsWith('.validationRule-meta.xml')) {
+            const ruleName = fileName.replace('.validationRule-meta.xml', '');
+            return { type: 'ValidationRule', name: ruleName };
+        }
+        
+        // Check if this is a list view
+        if (relativePath.includes('/listViews/') && fileName.endsWith('.listView-meta.xml')) {
+            const listViewName = fileName.replace('.listView-meta.xml', '');
+            return { type: 'ListView', name: listViewName };
+        }
+        
+        // Check if this is a web link
+        if (relativePath.includes('/webLinks/') && fileName.endsWith('.webLink-meta.xml')) {
+            const webLinkName = fileName.replace('.webLink-meta.xml', '');
+            return { type: 'WebLink', name: webLinkName };
+        }
+        
+        // Check if this is a record type
+        if (relativePath.includes('/recordTypes/') && fileName.endsWith('.recordType-meta.xml')) {
+            const recordTypeName = fileName.replace('.recordType-meta.xml', '');
+            return { type: 'RecordType', name: recordTypeName };
+        }
+        
+        // Check if this is a compact layout
+        if (relativePath.includes('/compactLayouts/') && fileName.endsWith('.compactLayout-meta.xml')) {
+            const layoutName = fileName.replace('.compactLayout-meta.xml', '');
+            return { type: 'CompactLayout', name: layoutName };
+        }
+        
+        // Check if this is a business process
+        if (relativePath.includes('/businessProcesses/') && fileName.endsWith('.businessProcess-meta.xml')) {
+            const processName = fileName.replace('.businessProcess-meta.xml', '');
+            return { type: 'BusinessProcess', name: processName };
+        }
+        
+        // Check if this is the custom object itself
+        if (fileName.endsWith('.object-meta.xml')) {
+            const objectName = fileName.replace('.object-meta.xml', '');
+            return { type: 'CustomObject', name: objectName };
+        }
+    }
+    
+    // Handle other metadata types
+    let componentName: string;
+    
+    if (relativePath.endsWith('-meta.xml')) {
+        // Remove -meta.xml suffix first
+        componentName = relativePath.slice(0, -'-meta.xml'.length);
+    } else if (relativePath.endsWith('.meta.xml')) {
+        // Remove .meta.xml suffix first  
+        componentName = relativePath.slice(0, -'.meta.xml'.length);
+    } else {
+        componentName = relativePath;
+    }
+    
+    // Remove file extension for most types (like .cls, .trigger, etc.)
+    const extension = path.extname(componentName);
+    if (extension) {
+        componentName = componentName.substring(0, componentName.length - extension.length);
+    }
+    
+    // For most metadata types, we only want the filename, not the full path
+    // Only preserve folder structure for specific metadata types that require it
+    if (!FOLDER_AWARE_METADATA_TYPES.has(baseFolderType)) {
+        componentName = path.basename(componentName);
+    }
+    
+    // Handle specific type exceptions
+    if (baseFolderType === 'CustomLabels') {
+        componentName = 'CustomLabels'; // There is only one CustomLabels component per org
+    }
+    
+    // Convert to forward-slash format
+    const finalName = componentName.replace(/\\/g, '/');
+    
+    return finalName ? { type: baseFolderType, name: finalName } : null;
+}
+
 function findFilesRecursively(dir: string): string[] {
     if (!fs.existsSync(dir)) {
         return [];
@@ -78,43 +191,31 @@ export async function getWorkspaceMetadata(): Promise<{ metadata: { [type: strin
                         .filter(dirent => dirent.isDirectory() && !dirent.name.startsWith('.'))
                         .map(dirent => dirent.name);
                 } 
+                // Handle all other file-based components recursively using the proper parser
                 else {
                     const allFiles = findFilesRecursively(typePath);
-                    const componentNames = new Set<string>();
+                    const componentsByType = new Map<string, Set<string>>();
 
                     allFiles.forEach(file => {
-                        if (path.basename(file).startsWith('.')) {
-                            return;
-                        }
-
-                        // --- CORRECTED COMPONENT NAME EXTRACTION LOGIC ---
-                        const relativePath = path.relative(typePath, file).replace(/\\/g, '/');
-
-                        let componentName = relativePath;
-                        if (componentName.endsWith('-meta.xml')) {
-                            componentName = componentName.slice(0, -'-meta.xml'.length);
-                        }
-
-                        const extension = path.extname(componentName);
-                        if (extension) {
-                            componentName = componentName.slice(0, -extension.length);
-                        }
+                        const relativePath = path.relative(typePath, file);
+                        const parsed = parseMetadataFromPath(relativePath, apiName);
                         
-                        if (apiName === 'CustomLabels') {
-                            componentName = 'CustomLabels';
-                        }
-
-                        if (componentName) {
-                            componentNames.add(componentName);
+                        if (parsed) {
+                            if (!componentsByType.has(parsed.type)) {
+                                componentsByType.set(parsed.type, new Set<string>());
+                            }
+                            componentsByType.get(parsed.type)!.add(parsed.name);
                         }
                     });
-                    items = Array.from(componentNames);
-                }
 
-                if (items.length > 0) {
-                    const existingItems = metadata[apiName] || [];
-                    const combinedItems = [...new Set([...existingItems, ...items])];
-                    metadata[apiName] = combinedItems.sort();
+                    // Add components to metadata grouped by their correct type
+                    componentsByType.forEach((names, type) => {
+                        if (names.size > 0) {
+                            const existingItems = metadata[type] || [];
+                            const combinedItems = [...new Set([...existingItems, ...Array.from(names)])];
+                            metadata[type] = combinedItems.sort();
+                        }
+                    });
                 }
             }
         }

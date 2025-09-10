@@ -2,6 +2,13 @@
 
 All notable changes to the "salesforce-metadata-deployer" extension will be documented in this file.
 
+## [1.1.2] - 2025-09-10
+
+### Fixed
+- **Package.xml Generation**: Critical fix for metadata parsing that was causing incorrect package.xml entries with full file paths instead of proper component names and metadata types
+- **Metadata Type Detection**: Restored sophisticated parsing logic that correctly identifies custom fields, validation rules, and other custom object components as separate metadata types
+- **Component Name Extraction**: Fixed extraction of clean component names from subfolders (e.g., `controllers/MyClass` now correctly becomes `MyClass` in package.xml)
+
 ## [1.1.1] - 2025-09-10
 
 ### Added
